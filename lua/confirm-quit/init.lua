@@ -2,7 +2,7 @@ local M = {}
 
 local options = {
 	overwrite_q_command = true,
-	quit_message = "Do you want to quit?",
+	quit_message = "do you want to quit?",
 }
 
 local GENERIC_ERROR_MESSAGE = "ConfirmQuit: Error while quitting"
@@ -39,7 +39,7 @@ local function prompt_user_to_quit()
 	local quit_message = type(options.quit_message) == "function"
                        and options.quit_message()
                        or options.quit_message
-	return vim.fn.confirm(quit_message, "&Yes\n&No", 2, "Question") == 1
+	return vim.fn.confirm(quit_message, "&yes\n&no", 2, "question") == 1
 end
 
 --- A wrapper for pcall that just prints an error in case of failure
@@ -56,6 +56,11 @@ end
 
 local function quitall(opts)
 	pcall_panic(vim.cmd.quitall, { bang = opts.bang, mods = { silent = true } })
+end
+
+local function writequit(opts)
+	pcall_panic(vim.cmd.write)
+	pcall_panic(vim.cmd.quit, { bang = opts.bang, mods = { silent = true } })
 end
 
 local confirm_quit_default_opts = { bang = false }
@@ -87,6 +92,21 @@ function M.confirm_quit_all(opts)
 	end
 end
 
+function M.confirm_write_quit(opts)
+	opts = opts or confirm_quit_default_opts
+
+	local is_last_tab_page = vim.fn.tabpagenr("$") == 1
+	local is_last_viewable = is_last_window() and is_last_tab_page
+	local should_quit = opts.bang
+		or (vim.bo.modified and not vim.o.confirm)
+		or not is_last_viewable
+		or prompt_user_to_quit()
+
+	if should_quit then
+		writequit(opts)
+	end
+end
+
 local function setup_autocmds()
 	local command_opts = { force = true, bang = true }
 
@@ -95,6 +115,9 @@ local function setup_autocmds()
 	end, command_opts)
 	vim.api.nvim_create_user_command("ConfirmQuitAll", function(opts)
 		M.confirm_quit_all { bang = opts.bang }
+	end, command_opts)
+	vim.api.nvim_create_user_command("ConfirmQuitWrite", function(opts)
+		M.confirm_quit { bang = opts.bang }
 	end, command_opts)
 end
 
@@ -107,6 +130,7 @@ local function setup_abbreviations()
 
 		cnoreabbrev <expr> q <SID>solely_in_cmd('q') ? 'ConfirmQuit' : 'q'
 		cnoreabbrev <expr> qa <SID>solely_in_cmd('qa') ? 'ConfirmQuitAll' : 'qa'
+		cnoreabbrev <expr> wq <SID>solely_in_cmd('wq') ? 'ConfirmQuitWrite' : 'wq'
 		cnoreabbrev <expr> qq <SID>solely_in_cmd('qq') ? 'quit' : 'qq'
 	]]
 end
